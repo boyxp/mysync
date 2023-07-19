@@ -2,13 +2,13 @@ package main
 
 import "os"
 import "log"
+import "bufio"
 import "strings"
+import "database/sql"
 import "encoding/json"
+import "mysync/model"
 import "github.com/boyxp/nova/database"
 import _ "github.com/joho/godotenv/autoload"
-import "mysync/model"
-import "database/sql"
-import "bufio"
 
 var db *sql.DB
 
@@ -38,12 +38,25 @@ func main() {
 
 		scheme := table_scheme(table)
 		save_scheme(table, scheme)
+		fields := table_field(scheme)
+
+		id := model.Mysync.Insert(map[string]string{
+			"type"        : "backup",
+			"table_name"  : table,
+			"pkey_field"  : fields["pkey_field"],
+			"create_field": fields["create_field"],
+			"update_field": fields["update_field"],
+			"latest_id"   : "-1",
+			"record_count": "0",
+		})
+
+		log.Println(id)
 	}
 }
 
 
 /*
-✅5、分析表的主键、创建时间和更新时间字段，插入首条记录，存储主键字段、更新时间字段、创建时间字段，最大ID为0
+✅5、插入首条记录，存储主键字段、更新时间字段、创建时间字段，最大ID为-1
 ✅6、导出数据存储json，一个表一个文件，带最后备份时间，记录包含主键、类型（新增、修改、删除）、最后时间、数据内容json
 ✅7、存储每个表的进度，类型为备份、表名、最大主键，两个最大时间点。二次备份时先检查小于最大主键但更新的记录，然后全量读取大于该主键的记录
 ✅8、主库只有备份记录，如果执行恢复操作则禁止，执行前先检查，有恢复记录则停止执行
@@ -100,7 +113,7 @@ func save_scheme(table string, scheme []map[string]string) {
         panic(err.Error())
     }
 
-    file, err := os.OpenFile("scheme."+table, os.O_WRONLY|os.O_CREATE, 0666)
+    file, err := os.OpenFile("scheme."+table+".json", os.O_WRONLY|os.O_CREATE, 0666)
     if err != nil {
         panic(err.Error())
     }
@@ -109,4 +122,23 @@ func save_scheme(table string, scheme []map[string]string) {
     write := bufio.NewWriter(file)
     write.WriteString(string(json))
     write.Flush()
+}
+
+func table_field(scheme []map[string]string) map[string]string {
+	result := map[string]string{"pkey_field":"","update_field":"","create_field":""}
+	for _, f := range scheme {
+		if f["key"]=="PRI" {
+			result["pkey_field"] = f["field"]
+		}
+
+		if f["type"]=="timestamp" && strings.Contains(f["extra"],"CURRENT_TIMESTAMP") {
+			result["update_field"] = f["field"]
+		}
+
+		if f["type"]=="timestamp" && f["default"]=="CURRENT_TIMESTAMP" {
+			result["create_field"] = f["field"]
+		}
+	}
+
+	return result
 }
