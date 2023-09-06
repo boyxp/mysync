@@ -8,9 +8,11 @@ import "database/sql"
 import "encoding/json"
 import "mysync/model"
 import "github.com/boyxp/nova/database"
+import "github.com/boyxp/nova/time"
 import _ "github.com/joho/godotenv/autoload"
 
 var db *sql.DB
+var backup_time string
 
 func init() {
 	database.Register("database", os.Getenv("database.dbname"), os.Getenv("database.dsn"))
@@ -19,12 +21,22 @@ func init() {
 func main() {
 	model.Init()
 
+	//检查是否备库
+	check := model.Mysync.Where("type", "restore").Find()
+	if check!=nil {
+		panic("备库无法二次备份")
+	}
+
 	db = database.Open("database")
 
 	include := os.Getenv("include")
 	exclude := os.Getenv("exclude")
+	scheme  := os.Getenv("scheme")
 
-	log.Println(include, exclude)
+	log.Println("备份包含：", include)
+	log.Println("备份排除：", exclude)
+
+	backup_time = time.Date("Y-m-d H:i:s")
 
 	tables := table_list()
 	for _,table := range tables {
@@ -36,33 +48,116 @@ func main() {
 			continue
 		}
 
-		scheme := table_scheme(table)
-		save_scheme(table, scheme)
-		fields := table_field(scheme)
+		log.Println("开始备份：", table)
 
-		id := model.Mysync.Insert(map[string]string{
-			"type"        : "backup",
-			"table_name"  : table,
-			"pkey_field"  : fields["pkey_field"],
-			"create_field": fields["create_field"],
-			"update_field": fields["update_field"],
-			"latest_id"   : "-1",
-			"record_count": "0",
-		})
-
-		log.Println(id)
+		_scheme := table_scheme(table)
+		if scheme=="yes" {
+			save_scheme(table, _scheme)
+		}
+		save_record(table, _scheme)
+		backup_data(table)
+		log.Println("完成备份：", table)
 	}
 }
 
+func backup_data(table string) {
+	//读取当前进度记录
+	info := model.Mysync.Where("table_name", table).Find()
+	if info==nil {
+		panic("记录进度读取失败")
+	}
 
-/*
-✅5、插入首条记录，存储主键字段、更新时间字段、创建时间字段，最大ID为-1
-✅6、导出数据存储json，一个表一个文件，带最后备份时间，记录包含主键、类型（新增、修改、删除）、最后时间、数据内容json
-✅7、存储每个表的进度，类型为备份、表名、最大主键，两个最大时间点。二次备份时先检查小于最大主键但更新的记录，然后全量读取大于该主键的记录
-✅8、主库只有备份记录，如果执行恢复操作则禁止，执行前先检查，有恢复记录则停止执行
-备份文件命名：库名_表名_最大主键ID_最后更新时间.mysql.data
+	//先检查是否有需要备份的记录
+	check_new    := database.Model{table}.Where(info["pkey_field"], ">", info["latest_id"]).Count()
+	check_update := database.Model{table}.Where(info["pkey_field"], "<=", info["latest_id"]).
+					Where(info["update_field"], ">", info["latest_time"]).Count()
+	if check_new==0 && check_update==0 {
+		log.Println("没有需要备份的数据：", table)
+		return
+	}
 
-*/
+	log.Println("上次备份最大主键：", info["latest_id"])
+	log.Println("上次备份最大时间：", info["latest_time"])
+
+
+	//打开备份文件
+    file, err := os.OpenFile("backup."+table+"."+backup_time+".json", os.O_WRONLY|os.O_CREATE, 0666)
+    if err != nil {
+        panic("备份文件文件打开失败")
+    }
+    defer file.Close()
+    write := bufio.NewWriter(file)
+
+
+	//先读取主键大于上次值的所有记录，备份类型为新建
+	count_new := 0
+	max_id := info["latest_id"]
+	pkey   := info["pkey_field"]
+	num    := 100
+	for true {
+		list := database.Model{table}.Where(pkey, ">", max_id).
+				Order(pkey, "asc").
+				Limit(num).
+				Select()
+
+		for _, v := range list {
+			count_new++
+			max_id = v[pkey]
+			_json, err := json.Marshal(v)
+			if err != nil {
+        		panic(err.Error())
+   			}
+
+			write.WriteString("insert\t"+v[pkey]+"\t"+v[info["create_field"]]+"\t"+string(_json)+"\n")
+		}
+
+		if len(list)<num {
+			break
+		}
+	}
+
+	log.Println("备份新增记录：", count_new)
+
+	//再读取主键小于上次值的但更新时间大于上次值的记录，备份类型为更新
+	count_update := 0
+	tmp_id := "-1"
+	latest_time := info["latest_time"]
+	for true {
+		list := database.Model{table}.Where(pkey, "<=", info["latest_id"]).
+				Where(info["update_field"], ">", latest_time).
+				Where(pkey, ">", tmp_id).
+				Order(pkey, "asc").
+				Limit(num).
+				Select()
+
+		for _, v := range list {
+			count_update++
+			tmp_id = v[pkey]
+			_json, err := json.Marshal(v)
+			if err != nil {
+        		panic(err.Error())
+   			}
+
+			write.WriteString("update\t"+v[pkey]+"\t"+v[info["update_field"]]+"\t"+string(_json)+"\n")
+		}
+
+		if len(list)<num {
+			break
+		}
+	}
+
+	log.Println("备份更新记录：", count_update)
+
+	//写入文件
+	write.Flush()
+
+	//存储本次备份进度
+	backup_time := time.Date("Y-m-d H:i:s")
+	model.Mysync.Where("table_name", table).Update(map[string]string{
+		"latest_id"   : max_id,
+		"latest_time" : backup_time,
+	})
+}
 
 func table_list() []string {
 	var result []string
@@ -80,7 +175,6 @@ func table_list() []string {
 }
 
 func table_scheme(table string) []map[string]string {
-		db        := database.Open("database")
 		rows, err := db.Query("describe "+table)
 		if err != nil {
     		panic(err.Error())
@@ -113,7 +207,7 @@ func save_scheme(table string, scheme []map[string]string) {
         panic(err.Error())
     }
 
-    file, err := os.OpenFile("scheme."+table+".json", os.O_WRONLY|os.O_CREATE, 0666)
+    file, err := os.OpenFile("scheme."+table+"."+backup_time+".json", os.O_WRONLY|os.O_CREATE, 0666)
     if err != nil {
         panic(err.Error())
     }
@@ -141,4 +235,29 @@ func table_field(scheme []map[string]string) map[string]string {
 	}
 
 	return result
+}
+
+func save_record(table string, scheme []map[string]string) {
+	fields := table_field(scheme)
+
+	exist := model.Mysync.Where("table_name", table).Find()
+
+	if exist!=nil {
+		model.Mysync.Where("table_name", table).Update(map[string]string{
+			"pkey_field"  : fields["pkey_field"],
+			"create_field": fields["create_field"],
+			"update_field": fields["update_field"],
+		})
+
+	} else {
+		model.Mysync.Insert(map[string]string{
+			"type"        : "backup",
+			"table_name"  : table,
+			"pkey_field"  : fields["pkey_field"],
+			"create_field": fields["create_field"],
+			"update_field": fields["update_field"],
+			"latest_id"   : "-1",
+			"record_count": "0",
+		})
+	}
 }
