@@ -24,11 +24,10 @@ func main() {
 	//检查是否备库
 	check := model.Mysync.Where("type", "restore").Find()
 	if check!=nil {
-		panic("备库无法二次备份")
+		log.Fatal("备库无法二次备份")
 	}
 
-	db = database.Open("database")
-
+	//读取环境变量设置
 	include := os.Getenv("include")
 	exclude := os.Getenv("exclude")
 	scheme  := os.Getenv("scheme")
@@ -36,8 +35,13 @@ func main() {
 	log.Println("备份包含：", include)
 	log.Println("备份排除：", exclude)
 
-	backup_time = time.Date("Y-m-d H:i:s")
+	//连接数据库
+	db = database.Open("database")
 
+	//统一备份时间
+	backup_time = time.Date("Y-m-d@H:i:s")
+
+	//遍历表备份
 	tables := table_list()
 	for _,table := range tables {
 		if include!="" && !strings.Contains(","+include+",", ","+table+",") {
@@ -54,6 +58,7 @@ func main() {
 		if scheme=="yes" {
 			save_scheme(table, _scheme)
 		}
+
 		save_record(table, _scheme)
 		backup_data(table)
 		log.Println("完成备份：", table)
@@ -64,7 +69,7 @@ func backup_data(table string) {
 	//读取当前进度记录
 	info := model.Mysync.Where("table_name", table).Find()
 	if info==nil {
-		panic("记录进度读取失败")
+		log.Fatal("记录进度读取失败：", table)
 	}
 
 	//先检查是否有需要备份的记录
@@ -83,7 +88,7 @@ func backup_data(table string) {
 	//打开备份文件
     file, err := os.OpenFile("backup."+table+"."+backup_time+".json", os.O_WRONLY|os.O_CREATE, 0666)
     if err != nil {
-        panic("备份文件文件打开失败")
+        log.Fatal("备份文件创建失败：", file, err.Error())
     }
     defer file.Close()
     write := bufio.NewWriter(file)
@@ -93,7 +98,7 @@ func backup_data(table string) {
 	count_new := 0
 	max_id := info["latest_id"]
 	pkey   := info["pkey_field"]
-	num    := 100
+	num    := 1000
 	for true {
 		list := database.Model{table}.Where(pkey, ">", max_id).
 				Order(pkey, "asc").
@@ -155,7 +160,7 @@ func backup_data(table string) {
 	backup_time := time.Date("Y-m-d H:i:s")
 	model.Mysync.Where("table_name", table).Update(map[string]string{
 		"latest_id"   : max_id,
-		"latest_time" : backup_time,
+		"latest_time" : strings.Replace(backup_time, "@", " ", 1),
 	})
 }
 
@@ -209,7 +214,7 @@ func save_scheme(table string, scheme []map[string]string) {
 
     file, err := os.OpenFile("scheme."+table+"."+backup_time+".json", os.O_WRONLY|os.O_CREATE, 0666)
     if err != nil {
-        panic(err.Error())
+        log.Fatal("结构文件创建失败：", file, err.Error())
     }
 
     defer file.Close()
