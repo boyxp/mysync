@@ -47,27 +47,33 @@ func main() {
       log.Fatal("备份文件命名格式错误：", file)
     }
 
+    table := tmp[1]
+
     //检查表是否存在
-    if _, ok := tables[tmp[1]];ok==false {
-      create_table(tmp[1], strings.Replace(file, "backup", "scheme", 1))
-      tables[tmp[1]] = tmp[1]
+    if _, ok := tables[table];ok==false {
+      create_table(table, strings.Replace(file, "backup", "scheme", 1))
+      tables[table] = table
 
       //如果存在，对比结构是否有差异
     } else {
-      alter_table(tmp[1], strings.Replace(file, "backup", "scheme", 1))
+      alter_table(table, strings.Replace(file, "backup", "scheme", 1))
     }
 
     log.Println(file)
-  }
 
-  /*
+    //导入数据
+    restore_data(table, file)
+  }
+}
+
+func restore_data(table string, data_file string) {
+    /*
   读取备份文件内容，遍历
     如果是插入，则直接插入
     如果是更新，则删除主键后，按主键为条件更新
     更新恢复进度：最大ID、最后时间
   */
 }
-
 
 var field_type = map[string]string{
   "char":"text",
@@ -161,9 +167,6 @@ func _field_default(_type string, default_value string) string {
 func alter_table(table string, scheme string) {
   new_scheme := load_scheme(scheme)
   old_scheme := table_scheme(table)
-
-  //log.Println(new_scheme)
-  //log.Println(old_scheme)
 
   for _, new_field := range new_scheme {
     //新增字段
