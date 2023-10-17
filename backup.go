@@ -2,13 +2,14 @@ package main
 
 import "os"
 import "log"
+import "time"
 import "bufio"
 import "strings"
 import "database/sql"
 import "encoding/json"
 import "mysync/model"
 import "github.com/boyxp/nova/database"
-import "github.com/boyxp/nova/time"
+import _time "github.com/boyxp/nova/time"
 import _ "github.com/joho/godotenv/autoload"
 
 var db *sql.DB
@@ -39,7 +40,7 @@ func main() {
 	db = database.Open("database")
 
 	//统一备份时间
-	backup_time = time.Date("Y-m-d@H:i:s")
+	backup_time = _time.Date("Y-m-d@H:i:s")
 
 	//遍历表备份
 	tables := table_list()
@@ -119,6 +120,8 @@ func backup_data(table string) {
 		if len(list)<num {
 			break
 		}
+
+		time.Sleep(1*time.Second)
 	}
 
 	log.Println("备份新增记录：", count_new)
@@ -149,6 +152,8 @@ func backup_data(table string) {
 		if len(list)<num {
 			break
 		}
+
+		time.Sleep(1*time.Second)
 	}
 
 	log.Println("备份更新记录：", count_update)
@@ -157,7 +162,7 @@ func backup_data(table string) {
 	write.Flush()
 
 	//存储本次备份进度
-	backup_time := time.Date("Y-m-d H:i:s")
+	backup_time := _time.Date("Y-m-d H:i:s")
 	model.Mysync.Where("table_name", table).Update(map[string]string{
 		"latest_id"   : max_id,
 		"latest_time" : strings.Replace(backup_time, "@", " ", 1),
