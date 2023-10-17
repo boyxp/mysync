@@ -76,19 +76,19 @@ func restore_data(table string, data_file string) {
 }
 
 var field_type = map[string]string{
-  "char":"text",
-  "varchar":"text",
-  "binary":"text",
-  "varbinary":"text",
-  "blob":"text",
-  "text":"text",
-  "enum":"text",
-  "set":"text",
-  "date":"time",
-  "time":"time",
-  "datetime":"time",
-  "timestamp":"time",
-  "year":"time",
+  "char"     : "text",
+  "varchar"  : "text",
+  "binary"   : "text",
+  "varbinary": "text",
+  "blob"     : "text",
+  "text"     : "text",
+  "enum"     : "text",
+  "set"      : "text",
+  "date"     : "time",
+  "time"     : "time",
+  "datetime" : "time",
+  "timestamp": "time",
+  "year"     : "time",
 }
 func create_table(table string, scheme string) {
   rows := load_scheme(scheme)
