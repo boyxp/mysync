@@ -116,8 +116,7 @@ func create_table(table string, scheme string) {
 
   _sql = _sql +") ENGINE=InnoDB DEFAULT CHARSET=utf8"
 
-  log.Println(_sql)
-
+  log.Println("建表:", table, "\tSQL:", _sql)
 
   sql_execute(_sql)
 }
@@ -143,22 +142,25 @@ func _field_default(_type string, default_value string) string {
     _default := ""
     if default_value!="" {
       if _t, ok := field_type[_type];ok {
-        if _t=="text" {
-            _default = " DEFAULT '"+default_value+"'"
-        } else if(_t=="time") {
-            re, err := regexp.Compile("[0-9]")
-            if err != nil {
-              log.Fatal(err)
-            }
-            if re.MatchString(default_value) {
-                _default = " DEFAULT '"+default_value+"'"
-            } else {
-                _default = " DEFAULT "+default_value
-            }
+          switch _t {
+            case "text":
+                      _default = " DEFAULT '"+default_value+"'"
+            case "time":
+                      re, err := regexp.Compile("[0-9]")
+                      if err != nil {
+                        log.Fatal(err)
+                      }
+                      if re.MatchString(default_value) {
+                          _default = " DEFAULT '"+default_value+"'"
+                      } else {
+                          _default = " DEFAULT "+default_value
+                      }
+            default :
+                    _default = " DEFAULT "+default_value
+          }
         } else {
-            _default = " DEFAULT "+default_value
+          _default = " DEFAULT "+default_value
         }
-      }
     }
 
     return _default
@@ -177,8 +179,8 @@ func alter_table(table string, scheme string) {
 
           _sql := "ALTER TABLE "+table+" ADD `"+new_field["field"]+"` "+new_field["type"]+_null+" "+new_field["extra"]+" "+_default+";"
           log.Println(_sql)
-      //新增字段
-      continue
+
+          continue
     }
 
     //旧字段对比差异
@@ -187,7 +189,7 @@ func alter_table(table string, scheme string) {
           _type    := _field_type(new_field["type"])
           _null    := _field_null(new_field["null"])
           _default := _field_default(_type, new_field["default"])
-
+log.Println(new_field,old_field)
           _sql := "ALTER TABLE "+table+" CHANGE `"+old_field["field"]+"` `"+new_field["field"]+"` "+new_field["type"]+_null+" "+new_field["extra"]+" "+_default+";"
           log.Println(_sql, old_field, new_field)
     }
