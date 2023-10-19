@@ -66,6 +66,8 @@ func main() {
 		save_record(table, _scheme)
 		backup_data(table)
 		log.Println("完成备份：", table)
+
+		time.Sleep(2*time.Second)
 	}
 }
 
@@ -120,6 +122,9 @@ func backup_data(table string) {
 			write.WriteString("insert\t"+v[pkey]+"\t"+v[info["create_field"]]+"\t"+string(_json)+"\n")
 		}
 
+		//写入文件
+		write.Flush()
+
 		if len(list)<num {
 			break
 		}
@@ -152,6 +157,9 @@ func backup_data(table string) {
 
 			write.WriteString("update\t"+v[pkey]+"\t"+v[info["update_field"]]+"\t"+string(_json)+"\n")
 		}
+
+		//写入文件
+		write.Flush()
 
 		if len(list)<num {
 			break
