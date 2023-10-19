@@ -100,9 +100,9 @@ func backup_data(table string) {
 
 	//先读取主键大于上次值的所有记录，备份类型为新建
 	count_new := 0
-	max_id := info["latest_id"]
-	pkey   := info["pkey_field"]
-	num    := 1000
+	max_id    := info["latest_id"]
+	pkey      := info["pkey_field"]
+	num       := 1000
 	for true {
 		list := database.Model{table}.Where(pkey, ">", max_id).
 				Order(pkey, "asc").
@@ -131,8 +131,8 @@ func backup_data(table string) {
 
 	//再读取主键小于上次值的但更新时间大于上次值的记录，备份类型为更新
 	count_update := 0
-	tmp_id := "-1"
-	latest_time := info["latest_time"]
+	tmp_id       := "-1"
+	latest_time  := info["latest_time"]
 	for true {
 		list := database.Model{table}.Where(pkey, "<=", info["latest_id"]).
 				Where(info["update_field"], ">", latest_time).
