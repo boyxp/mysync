@@ -2,14 +2,14 @@ package main
 
 import "os"
 import "io"
-import "bufio"
 import "log"
+import "bufio"
 import "regexp"
-import "path/filepath"
 import "strings"
 import "database/sql"
 import "mysync/model"
 import "encoding/json"
+import "path/filepath"
 import "github.com/boyxp/nova/database"
 import _ "github.com/joho/godotenv/autoload"
 
@@ -76,6 +76,8 @@ func restore_data(table string, data_file string) {
   }
   defer f.Close()
 
+  insert_count := 0
+  update_count := 0
   r := bufio.NewReader(f)
   for {
     bytes, _, err := r.ReadLine()
@@ -98,12 +100,14 @@ func restore_data(table string, data_file string) {
     }
 
     if data[0]=="insert" {
-      log.Println("插入", line)
+      log.Println("插入：", line)
       _conn.Insert(_json)
+      insert_count++
 
     } else if data[0]=="update" {
-      log.Println("更新", line)
+      log.Println("更新：", line)
       _conn.Where(data[1]).Update(_json)
+      update_count++
 
     } else {
       log.Fatal("暂不支持的类型", data)
@@ -112,6 +116,8 @@ func restore_data(table string, data_file string) {
   }
 
   os.Rename(data_file, data_file+".ok")
+
+  log.Println("恢复完毕：", data_file, "插入：", insert_count, "更新：", update_count)
 }
 
 var field_type = map[string]string{
@@ -155,7 +161,7 @@ func create_table(table string, scheme string) {
 
   _sql = _sql +") ENGINE=InnoDB DEFAULT CHARSET=utf8"
 
-  log.Println("建表:", table, "\tSQL:", _sql)
+  log.Println("建表：", table, "\tSQL:", _sql)
 
   sql_execute(_sql)
 }
@@ -219,7 +225,7 @@ func alter_table(table string, scheme string) {
           _sql := "ALTER TABLE "+table+" ADD `"+new_field["field"]+"` "+new_field["type"]+_null+" "+new_field["extra"]+" "+_default+";"
 
           sql_execute(_sql)
-          log.Println("添加字段:", table, "\tSQL:", _sql)
+          log.Println("添加字段：", table, "\tSQL:", _sql)
 
           continue
     }
@@ -234,7 +240,7 @@ func alter_table(table string, scheme string) {
           _sql := "ALTER TABLE "+table+" CHANGE `"+old_field["field"]+"` `"+new_field["field"]+"` "+new_field["type"]+_null+" "+new_field["extra"]+" "+_default+";"
 
           sql_execute(_sql)
-          log.Println("修改字段:", table, "\tSQL:", _sql)
+          log.Println("修改字段：", table, "\tSQL:", _sql)
     }
   }
 }
