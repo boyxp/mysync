@@ -39,8 +39,11 @@ func main() {
 	//连接数据库
 	db = database.Open("database")
 
+	//先休息一秒，避免备份同一秒有更新
+	time.Sleep(1*time.Second)
+
 	//统一备份时间
-	backup_time = _time.Date("Y-m-d@H:i:s")
+	backup_time = _time.Date("Y-m-d H:i:s")
 
 	//遍历表备份
 	tables := table_list()
@@ -87,7 +90,7 @@ func backup_data(table string) {
 
 
 	//打开备份文件
-    file, err := os.OpenFile("backup."+table+"."+backup_time+".json", os.O_WRONLY|os.O_CREATE, 0666)
+    file, err := os.OpenFile("backup."+table+"."+strings.Replace(backup_time, " ", "@", 1)+".json", os.O_WRONLY|os.O_CREATE, 0666)
     if err != nil {
         log.Fatal("备份文件创建失败：", file, err.Error())
     }
@@ -133,6 +136,7 @@ func backup_data(table string) {
 	for true {
 		list := database.Model{table}.Where(pkey, "<=", info["latest_id"]).
 				Where(info["update_field"], ">", latest_time).
+				Where(info["update_field"], "<=", backup_time).
 				Where(pkey, ">", tmp_id).
 				Order(pkey, "asc").
 				Limit(num).
@@ -162,10 +166,9 @@ func backup_data(table string) {
 	write.Flush()
 
 	//存储本次备份进度
-	backup_time := _time.Date("Y-m-d H:i:s")
 	model.Mysync.Where("table_name", table).Update(map[string]string{
 		"latest_id"   : max_id,
-		"latest_time" : strings.Replace(backup_time, "@", " ", 1),
+		"latest_time" : backup_time,
 	})
 }
 
@@ -217,7 +220,7 @@ func save_scheme(table string, scheme []map[string]string) {
         panic(err.Error())
     }
 
-    file, err := os.OpenFile("scheme."+table+"."+backup_time+".json", os.O_WRONLY|os.O_CREATE, 0666)
+    file, err := os.OpenFile("scheme."+table+"."+strings.Replace(backup_time, " ", "@", 1)+".json", os.O_WRONLY|os.O_CREATE, 0666)
     if err != nil {
         log.Fatal("结构文件创建失败：", file, err.Error())
     }
